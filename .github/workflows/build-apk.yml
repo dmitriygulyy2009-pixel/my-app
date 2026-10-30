@@ -1,0 +1,67 @@
+name: Build APK
+
+# Запуск: вкладка Actions -> "Build APK" -> Run workflow (или автоматически при каждом push в main/master)
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Generate app icon and splash from assets/
+        run: npx capacitor-assets generate --android
+
+      - name: Landscape orientation
+        run: |
+          sed -i 's|android:name=".MainActivity"|android:name=".MainActivity" android:screenOrientation="sensorLandscape"|' android/app/src/main/AndroidManifest.xml
+          grep -n screenOrientation android/app/src/main/AndroidManifest.xml
+
+      - name: Sync web build into Android
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk DashWorld.apk
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DashWorld-apk
+          path: DashWorld.apk
+
+      - name: Publish to Releases (download directly on phone)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --cleanup-tag -y || true
+          gh release create latest DashWorld.apk --title "DashWorld (latest build)" --notes "Debug APK, build ${{ github.run_number }}"
