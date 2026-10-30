@@ -1,8 +1,0 @@
-node_modules
-dist
-android/app/build
-android/.gradle
-android/local.properties
-*.keystore
-*.jks
-.DS_Store
